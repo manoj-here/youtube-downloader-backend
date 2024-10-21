@@ -1,7 +1,6 @@
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import yt_dlp
-import logging
 import subprocess
 import os
 
@@ -93,11 +92,9 @@ def download_video():
     url = data.get('url')
     quality = data.get('quality')
 
-    logging.info(f"Received download request for URL: {url} with quality: {quality}")
-
     # I will do it later 😅 too tired.
 
-    return jsonify({"message": "Download in progress..."})
+    return jsonify({"url": url, "quality": quality}), 200
 
 
 
