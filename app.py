@@ -1,7 +1,12 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
 import yt_dlp
+import logging
+import subprocess
+import os
 
 app = Flask(__name__)
+CORS(app)
 
 @app.route("/check", methods=["POST"])
 def get_video_formats():
@@ -75,6 +80,21 @@ def get_video_formats():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/download", methods=["POST"])
+def download_video():
+    data = request.json
+    url = data.get('url')
+    quality = data.get('quality')
+
+    logging.info(f"Received download request for URL: {url} with quality: {quality}")
+
+    # Proceed with your download logic here...
+
+    return jsonify({"message": "Download in progress..."})
+
+
 
 if __name__ == "__main__":
     app.run(debug=True)
