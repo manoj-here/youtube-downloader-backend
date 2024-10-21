@@ -16,8 +16,8 @@ def get_video_formats():
         return jsonify({"error": "No URL provided"}), 400
 
     ydl_opts = {
-        'noplaylist': True,  # Ignore playlists
-        'source_address': '0.0.0.0',  # Enforce use of IPv4 for better speed.
+        'noplaylist': True,
+        'source_address': '0.0.0.0',  # equivalent of --force-ipv4 flag, gives you best speed possible.
     }
 
     try:
@@ -31,14 +31,13 @@ def get_video_formats():
             response = []
 
             # Iterate over the formats to extract necessary information
-            for fmt in sanitized_info['formats']:
-                # If audio stream exists, add it to the response (only one entry needed)
+            for fmt in sanitized_info['formats']:                
                 if fmt.get("acodec", 'none') != 'none' and not audio_exists:
                     response.append({
                         "icon": "bx bxs-music",
-                        "quality": "mp3"  # Assuming only one audio format is required
+                        "quality": "mp3"
                     })
-                    audio_exists = True  # Set the flag to True after adding audio
+                    audio_exists = True
 
                 # Convert video resolutions to general quality terms
                 resolution = fmt.get("resolution")
@@ -67,9 +66,10 @@ def get_video_formats():
                 "2160p": 2160,
             }
             # Sort the video_resolutions based on their numerical values
+            # because unmanaged structures annoys me. 
             sorted_resolutions = sorted(video_resolutions, key=lambda x: resolution_mapping[x])
 
-            # Add unique video resolutions to the response
+            # Add unique video resolutions to the response unique means no duplicate. 
             for quality in sorted_resolutions:
                 response.append({
                     "icon": "bx bxs-video",
@@ -81,6 +81,11 @@ def get_video_formats():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# =========================================#
+#------  CHECK PART IS WORKING FINE -------#
+# =========================================#
+
+
 
 @app.route("/download", methods=["POST"])
 def download_video():
@@ -90,7 +95,7 @@ def download_video():
 
     logging.info(f"Received download request for URL: {url} with quality: {quality}")
 
-    # Proceed with your download logic here...
+    # I will do it later 😅 too tired.
 
     return jsonify({"message": "Download in progress..."})
 
