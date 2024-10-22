@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, send_file
+from tempfile import TemporaryDirectory
 from flask_cors import CORS
 import yt_dlp
 import subprocess
@@ -92,9 +93,52 @@ def download_video():
     url = data.get('url')
     quality = data.get('quality')
 
-    # I will do it later 😅 too tired.
+    # default flags (options)
+    ydl_opts = {
+        'outtmpl': '%(title)s.%(ext)s',
+        'noplaylist': True,
+        'source_address': '0.0.0.0',
+    }
 
-    return jsonify({"url": url, "quality": quality}), 200
+    if quality == 'mp3':
+        # Audio download options
+        ydl_opts['format'] = 'bestaudio'
+        ydl_opts['postprocessors'] = [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }]
+    else:
+        # Video download options
+        return jsonify({"message": "video processing under-developement!"}), 200
+
+    # Create a temporary directory to store the downloaded file
+    with TemporaryDirectory() as tmpdirname:
+        ydl_opts['outtmpl'] = os.path.join(tmpdirname, '%(title)s.%(ext)s')
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+                # Get the info dictionary
+                info_dict = ydl.extract_info(url, download=False)
+
+            # Check for the downloaded audio file
+            if quality == 'mp3':
+                # Construct the expected MP3 file path
+                audio_file_path = os.path.join(tmpdirname, f"{info_dict['title']}.mp3")
+            else:
+                # For video formats, use the correct extension based on quality
+                video_file_path = os.path.join(tmpdirname, f"{info_dict['title']}.{quality.split('p')[0]}")  # Assuming it follows naming convention
+                audio_file_path = video_file_path  # Use the same path if it's a video format
+
+            # Check if the audio file exists
+            if os.path.exists(audio_file_path):
+                return send_file(audio_file_path, as_attachment=True)
+            else:
+                return jsonify({'error': 'File not found after extraction.'}), 500
+
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
 
 
 
