@@ -2,11 +2,34 @@ from flask import Flask, request, jsonify, send_file
 from tempfile import TemporaryDirectory
 from flask_cors import CORS
 import yt_dlp
-import subprocess
+# import subprocess
 import os
+import re
+
+
+DOWNLOAD_DIR = os.path.expanduser('~/Downloads/flask_downloads')
+
+if not os.path.exists(DOWNLOAD_DIR):
+    os.makedirs(DOWNLOAD_DIR)
+
+# Create a temporary directory for the download
+temp_dir = os.path.join(DOWNLOAD_DIR, "temp")
+os.makedirs(temp_dir, exist_ok=True)
+
+def sanitize_filename(filename):
+    # Replace any character that is not alphanumeric, or a dot/underscore with an underscore
+    sanitized = re.sub(r'[<>:"/\\|?*,\s(){}[\]-]', '_', filename)  # Replace invalid characters, whitespace, commas, hyphens, and brackets with '_'
+    sanitized = re.sub(r'_+', '_', sanitized)  # Replace multiple consecutive underscores with a single underscore
+    return sanitized
 
 app = Flask(__name__)
-CORS(app)
+
+CORS(app, resources={r"/*": {
+    "origins": "*",  # Allow any origin
+    "methods": ["GET", "POST", "OPTIONS"],  # Allow specific methods
+    "allow_headers": "*",  # Allow any headers
+    "expose_headers": ["Content-Disposition"]  # Expose specific headers
+}})
 
 @app.route("/check", methods=["POST"])
 def get_video_formats():
@@ -95,7 +118,6 @@ def download_video():
 
     # default flags (options)
     ydl_opts = {
-        'outtmpl': '%(title)s.%(ext)s',
         'noplaylist': True,
         'source_address': '0.0.0.0',
     }
@@ -103,42 +125,41 @@ def download_video():
     if quality == 'mp3':
         # Audio download options
         ydl_opts['format'] = 'bestaudio'
-        ydl_opts['postprocessors'] = [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '192',
-        }]
+        ydl_opts['postprocessors'] = [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3','preferredquality': '192'}]
     else:
         # Video download options
-        return jsonify({"message": "video processing under-developement!"}), 200
+        quality_height = int(quality.rstrip('p')) # this removes p [720p => 720]
+        ydl_opts['format'] = f'bestvideo[height={quality_height}]+bestaudio'
+        ydl_opts['postprocessors']= [{'key': 'FFmpegVideoConvertor','preferedformat': 'mp4'}]
 
-    # Create a temporary directory to store the downloaded file
-    with TemporaryDirectory() as tmpdirname:
-        ydl_opts['outtmpl'] = os.path.join(tmpdirname, '%(title)s.%(ext)s')
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info_dict = ydl.extract_info(url, download=False)
 
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
-                # Get the info dictionary
-                info_dict = ydl.extract_info(url, download=False)
+        # Sanitize the title for use in the filename
+        sanitized_title = sanitize_filename(info_dict['title'])
+        ydl_opts['outtmpl'] = os.path.join(temp_dir, f'{sanitized_title}.%(ext)s')
 
-            # Check for the downloaded audio file
-            if quality == 'mp3':
-                # Construct the expected MP3 file path
-                audio_file_path = os.path.join(tmpdirname, f"{info_dict['title']}.mp3")
-            else:
-                # For video formats, use the correct extension based on quality
-                video_file_path = os.path.join(tmpdirname, f"{info_dict['title']}.{quality.split('p')[0]}")  # Assuming it follows naming convention
-                audio_file_path = video_file_path  # Use the same path if it's a video format
+        # Download the file with the updated outtmpl
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
 
-            # Check if the audio file exists
-            if os.path.exists(audio_file_path):
-                return send_file(audio_file_path, as_attachment=True)
-            else:
-                return jsonify({'error': 'File not found after extraction.'}), 500
+        # Find the best format for audio or video
+        if quality.lower() == 'mp3':            
+            file_path = os.path.join(temp_dir, f"{sanitized_title}.mp3")
+        else:
+            file_path = os.path.join(temp_dir, f"{sanitized_title}.mp4")
 
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+        # Check if the downloaded file exists
+        if os.path.exists(file_path):
+            return send_file(file_path, as_attachment=True)
+        else:
+            return jsonify({'error': 'File not found after extraction.'}), 500
+
+    except yt_dlp.utils.DownloadError as e:
+        return jsonify({'error': 'Download failed: ' + str(e)}), 500
+    except Exception as e:
+        return jsonify({'error': 'An error occurred: ' + str(e)}), 500
 
 
 
