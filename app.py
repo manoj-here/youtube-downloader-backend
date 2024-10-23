@@ -28,7 +28,7 @@ CORS(app, resources={r"/*": {
     "origins": "*",  # Allow any origin
     "methods": ["GET", "POST", "OPTIONS"],  # Allow specific methods
     "allow_headers": "*",  # Allow any headers
-    "expose_headers": ["Content-Disposition"]  # Expose specific headers
+    "expose_headers": ["Content-Disposition","Content-Length"]  # Expose specific headers
 }})
 
 @app.route("/check", methods=["POST"])
@@ -138,11 +138,22 @@ def download_video():
 
         # Sanitize the title for use in the filename
         sanitized_title = sanitize_filename(info_dict['title'])
-        ydl_opts['outtmpl'] = os.path.join(temp_dir, f'{sanitized_title}.%(ext)s')
+        ydl_opts['outtmpl'] = os.path.join(temp_dir, f'{sanitized_title}.%(ext)s')  
 
         # Download the file with the updated outtmpl
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+        ydl = yt_dlp.YoutubeDL(ydl_opts)
+
+        def hook(d):
+            if d['status'] == 'finished':
+                print('Done downloading:', d['filename'])
+            elif d['status'] == 'downloading':
+                total_bytes = d.get('total_bytes', None)
+                downloaded_bytes = d.get('downloaded_bytes', 0)
+                if total_bytes:
+                    percentage = (downloaded_bytes / total_bytes) * 100
+                    print(f"Download progress: {percentage:.2f}%")
+
+        ydl.download([url])
 
         # Find the best format for audio or video
         if quality.lower() == 'mp3':            
@@ -152,7 +163,9 @@ def download_video():
 
         # Check if the downloaded file exists
         if os.path.exists(file_path):
-            return send_file(file_path, as_attachment=True)
+            response = send_file(file_path, as_attachment=True)
+            response.headers['Content-Length'] = os.path.getsize(file_path)
+            return response
         else:
             return jsonify({'error': 'File not found after extraction.'}), 500
 
