@@ -1,20 +1,12 @@
 from flask import Flask, request, jsonify, send_file
-from tempfile import TemporaryDirectory
 from flask_cors import CORS
+import tempfile
 import yt_dlp
-# import subprocess
 import os
 import re
 
-
-DOWNLOAD_DIR = os.path.expanduser('~/Downloads/flask_downloads')
-
-if not os.path.exists(DOWNLOAD_DIR):
-    os.makedirs(DOWNLOAD_DIR)
-
 # Create a temporary directory for the download
-temp_dir = os.path.join(DOWNLOAD_DIR, "temp")
-os.makedirs(temp_dir, exist_ok=True)
+temp_dir = tempfile.mkdtemp()
 
 def sanitize_filename(filename):
     # Replace any character that is not alphanumeric, or a dot/underscore with an underscore
@@ -141,18 +133,7 @@ def download_video():
         ydl_opts['outtmpl'] = os.path.join(temp_dir, f'{sanitized_title}.%(ext)s')  
 
         # Download the file with the updated outtmpl
-        ydl = yt_dlp.YoutubeDL(ydl_opts)
-
-        def hook(d):
-            if d['status'] == 'finished':
-                print('Done downloading:', d['filename'])
-            elif d['status'] == 'downloading':
-                total_bytes = d.get('total_bytes', None)
-                downloaded_bytes = d.get('downloaded_bytes', 0)
-                if total_bytes:
-                    percentage = (downloaded_bytes / total_bytes) * 100
-                    print(f"Download progress: {percentage:.2f}%")
-
+        ydl = yt_dlp.YoutubeDL(ydl_opts)        
         ydl.download([url])
 
         # Find the best format for audio or video
